@@ -3,7 +3,7 @@
 
 #include "Arduino.h"
 
-#define CONFIG_WLTOYS // <- Select the correct transmitter configuration here before uploading!
+#define CONFIG_MICRO_RC // <- Select the correct transmitter configuration here before uploading!
 
 //
 // =======================================================================================================
@@ -11,7 +11,7 @@
 // =======================================================================================================
 //
 
-// Configuration for the standard "Micro RC" transmitter with 4 channels and IR support----------------------
+// Configuration for the standard "Micro RC" transmitter with 4 channels and wihoud IR support----------------------
 #ifdef CONFIG_MICRO_RC
 // Battery type
 const float cutoffVoltage = 4.4; // 4 x Eneloop cell
@@ -24,7 +24,7 @@ const float diodeDrop = 0.72;
 #define CH4
 
 // Infrared
-boolean infrared = true;
+boolean infrared = false;
 
 // Board type
 const float boardVersion = 1.0; // Board revision (MUST MATCH WITH YOUR BOARD REVISION!!)

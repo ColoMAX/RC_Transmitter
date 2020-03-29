@@ -21,7 +21,7 @@ const float codeVersion = 2.2; // Software revision
 //
 
 //#define DEBUG // if not commented out, Serial.print() is active! For debugging only!!
-//#define OLED_DEBUG // if not commented out, an additional diagnostics screen is shown during startup
+#define OLED_DEBUG // if not commented out, an additional diagnostics screen is shown during startup
 
 //
 // =======================================================================================================
@@ -34,7 +34,7 @@ const float codeVersion = 2.2; // Software revision
 #include <RF24.h> // Installed via Tools > Board > Boards Manager > Type RF24
 #include <printf.h>
 #include <EEPROMex.h> // https://github.com/thijse/Arduino-EEPROMEx
-#include <LegoIr.h> // https://github.com/TheDIYGuy999/LegoIr
+//#include <LegoIr.h> // https://github.com/TheDIYGuy999/LegoIr
 #include <statusLED.h> // https://github.com/TheDIYGuy999/statusLED
 #include <U8glib.h> // https://github.com/olikraus/u8glib or https://bintray.com/olikraus/u8glib/Arduino
 
@@ -83,6 +83,7 @@ struct RcData {
   boolean mode1 = false; // Mode1 (toggle speed limitation)
   boolean mode2 = false; // Mode2 (toggle acc. / dec. limitation)
   boolean momentary1 = false; // Momentary push button
+  boolean momentary2 = false; //reservd button
   byte pot1; // Potentiometer
 };
 RcData data;
@@ -98,11 +99,6 @@ ackPayload payload;
 
 // Did the receiver acknowledge the sent data?
 boolean transmissionState;
-
-// LEGO powerfunctions IR
-LegoIr pf;
-int pfChannel;
-const int pfMaxAddress = 3;
 
 // TX voltages
 boolean batteryOkTx = false;
@@ -166,7 +162,7 @@ byte joystickPercentPositive[maxVehicleNumber + 1][4] = { // 1 + 10 Vehicle Addr
 
 // Joystick push buttons
 #define JOYSTICK_BUTTON_LEFT 4
-#define JOYSTICK_BUTTON_RIGHT 2
+#define JOYSTICK_BUTTON_RIGHT 2  //Switch mnodes
 
 byte leftJoystickButtonState;
 byte rightJoystickButtonState;
@@ -176,11 +172,8 @@ byte rightJoystickButtonState;
 #define BUTTON_RIGHT 10 // + or transmission mode select
 #define BUTTON_SEL 0 // select button for menu
 #define BUTTON_BACK 9 // back button for menu
+#define BUTTON_RESRV 3 //sererved button
 
-byte leftButtonState = 7; // init states with 7 (see macro below)!
-byte rightButtonState = 7;
-byte selButtonState = 7;
-byte backButtonState = 7;
 
 // macro for detection of rising edge and debouncing
 /*the state argument (which must be a variable) records the current and the last 3 reads
@@ -200,7 +193,6 @@ statusLED redLED(false); // red: ON = battery empty
 #endif
 
 // OLED display. Select the one you have! Otherwise sthe sreen could be slightly offset sideways!
-//U8GLIB_SH1106_128X64 u8g(U8G_I2C_OPT_FAST);  // I2C / TWI  FAST instead of NONE = 400kHz I2C!
 U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_FAST);  // I2C / TWI  FAST instead of NONE = 400kHz I2C!
 int activeScreen = 0; // the currently displayed screen number (0 = splash screen)
 boolean displayLocked = true;
@@ -222,8 +214,9 @@ int addressPositive = EEPROM.getAddress(sizeof(byte) * 44);
 // Tabs (header files in sketch directory)
 #include "readVCC.h"
 //#include "transmitterConfig.h"
-#include "MeccanoIr.h" // https://github.com/TheDIYGuy999/MeccanoIr
+//#include "MeccanoIr.h" // https://github.com/TheDIYGuy999/MeccanoIr
 #include "pong.h" // A little pong game :-)
+#include "logo.h"
 
 //
 // =======================================================================================================
@@ -238,8 +231,9 @@ void setupRadio() {
   radio.powerUp();
 
   // Set Power Amplifier (PA) level to one of four levels: RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH and RF24_PA_MAX
-  if (boardVersion < 1.1 ) radio.setPALevel(RF24_PA_MIN); // No independent NRF24L01 3.3V PSU, so only "MIN" transmission level allowed
-  else radio.setPALevel(RF24_PA_MAX); // Independent NRF24L01 3.3V PSU, so "FULL" transmission level allowed
+  //if (boardVersion < 1.1 ) radio.setPALevel(RF24_PA_MIN); // No independent NRF24L01 3.3V PSU, so only "MIN" transmission level allowed
+  //else
+  radio.setPALevel(RF24_PA_MAX); // Independent NRF24L01 3.3V PSU, so "FULL" transmission level allowed
 
   radio.setDataRate(RF24_250KBPS);
   radio.setAutoAck(pipeOut[vehicleNumber - 1], true); // Ensure autoACK is enabled
@@ -274,20 +268,6 @@ void setupRadio() {
 
 //
 // =======================================================================================================
-// LEGO POWERFUNCTIONS SETUP
-// =======================================================================================================
-//
-
-void setupPowerfunctions() {
-  pfChannel = vehicleNumber - 1;  // channel 0 - 3 is labelled as 1 - 4 on the LEGO devices!
-
-  if (pfChannel > pfMaxAddress) pfChannel = pfMaxAddress;
-
-  pf.begin(3, pfChannel);  // Pin 3, channel 0 - 3
-}
-
-//
-// =======================================================================================================
 // MAIN ARDUINO SETUP (1x during startup)
 // =======================================================================================================
 //
@@ -311,6 +291,7 @@ void setup() {
   pinMode(BUTTON_RIGHT, INPUT_PULLUP);
   pinMode(BUTTON_SEL, INPUT_PULLUP);
   pinMode(BUTTON_BACK, INPUT_PULLUP);
+  pinMode(BUTTON_RESRV, INPUT_PULLUP);
 
   // EEPROM setup
   EEPROM.readBlock(addressReverse, joystickReversed); // restore all arrays from the EEPROM
@@ -346,7 +327,7 @@ void setup() {
   setupRadio();
 
   // LEGO Powerfunctions setup
-  setupPowerfunctions();
+  //setupPowerfunctions();
 
   // Display setup
   u8g.setFontRefHeightExtendedText();
@@ -358,10 +339,14 @@ void setup() {
   checkBattery();
   activeScreen = 0; // 0 = splash screen active
   drawDisplay();
+  delay(3500);
+  activeScreen = 101; // splash 2
+  drawDisplay();
+  delay(3500);
 #ifdef OLED_DEBUG
   activeScreen = 100; // switch to the diagnostics screen
-  delay(1500);
   drawDisplay();
+  delay(1500);
 #endif
   activeScreen = 1; // switch to the main screen
   delay(1500);
@@ -391,6 +376,12 @@ void travelAdjust(boolean upDn) {
 
 // Main buttons function --------------------------------------------------------------------------
 void readButtons() {
+  
+static byte leftButtonState = 7; // init states with 7 (see macro below)!
+static byte rightButtonState = 7;
+static byte selButtonState = 7;
+static byte backButtonState = 7;
+static byte resvButtonState = 7;
 
   // Every 10 ms
   static unsigned long lastTrigger;
@@ -408,38 +399,42 @@ void readButtons() {
       data.mode2 = !data.mode2;
       drawDisplay();
     }
+    //rev button
+    if (DRE(digitalRead(BUTTON_RESRV), resvButtonState) && (transmissionMode == 1)) {
+      data.momentary2 = !data.momentary2;
+    }
 
     if (activeScreen <= 10) { // if menu is not displayed ----------
 
       // Left button: Channel selection +
-      if (DRE(digitalRead(BUTTON_LEFT), leftButtonState) && (transmissionMode < 3)) {
-        vehicleNumber ++;
-        if (vehicleNumber > maxVehicleNumber) vehicleNumber = 1;
-        setupRadio(); // Re-initialize the radio with the new pipe address
-        setupPowerfunctions(); // Re-initialize the LEGO IR transmitter with the new channel address
-        drawDisplay();
-      }
+      //      if (DRE(digitalRead(BUTTON_LEFT), leftButtonState) && (transmissionMode < 3)) {
+      //        vehicleNumber ++;
+      //        if (vehicleNumber > maxVehicleNumber) vehicleNumber = 1;
+      //        setupRadio(); // Re-initialize the radio with the new pipe address
+      //        setupPowerfunctions(); // Re-initialize the LEGO IR transmitter with the new channel address
+      //        drawDisplay();
+      //      }
 
       // Right button: Change transmission mode. Radio <> IR
       if (infrared) { // only, if transmitter has IR option
-        if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState)) {
-          if (transmissionMode < 3) transmissionMode ++;
-          else {
-            transmissionMode = 1;
-            setupRadio(); // Re-initialize radio, if we switch back to radio mode!
-          }
-          drawDisplay();
-        }
+        //        if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState)) {
+        //          if (transmissionMode < 3) transmissionMode ++;
+        //          else {
+        //            transmissionMode = 1;
+        //            setupRadio(); // Re-initialize radio, if we switch back to radio mode!
+        //          }
+        //          drawDisplay();
+        //        }
       }
       else { // only, if transmitter has no IR option
         // Right button: Channel selection -
-        if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState) && (transmissionMode < 3)) {
-          vehicleNumber --;
-          if (vehicleNumber < 1) vehicleNumber = maxVehicleNumber;
-          setupRadio(); // Re-initialize the radio with the new pipe address
-          setupPowerfunctions(); // Re-initialize the LEGO IR transmitter with the new channel address
-          drawDisplay();
-        }
+        //        if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState) && (transmissionMode < 3)) {
+        //          vehicleNumber --;
+        //          if (vehicleNumber < 1) vehicleNumber = maxVehicleNumber;
+        //          setupRadio(); // Re-initialize the radio with the new pipe address
+        //          setupPowerfunctions(); // Re-initialize the LEGO IR transmitter with the new channel address
+        //          drawDisplay();
+        //        }
       }
     }
     else { // if menu is displayed -----------
@@ -495,6 +490,8 @@ void readButtons() {
         EEPROM.updateBlock(addressPositive, joystickPercentPositive);
       }
     }
+    
+    
   }
 }
 
@@ -606,128 +603,6 @@ void readPotentiometer() {
   data.pot1 = constrain(data.pot1, 0, 100);
 }
 
-//
-// =======================================================================================================
-// TRANSMIT LEGO POWERFUNCTIONS IR SIGNAL
-// =======================================================================================================
-//
-
-void transmitLegoIr() {
-  static byte speedOld[2];
-  static byte speed[2];
-  static byte pwm[2];
-  static unsigned long previousMillis;
-
-  unsigned long currentMillis = millis();
-
-  // Flash green LED
-  greenLED.flash(30, 2000, 0, 0);
-
-  // store joystick positions into an array-----
-  speed[0] = data.axis3;
-  speed[1] = data.axis2;
-
-  // compute pwm value for "red" and "blue" motor, if speed has changed more than +/- 3, or every 0.6s
-  // NOTE: one IR pulse at least every 1.2 s is required in order to prevent the vehivle from stopping
-  // due to a signal timeout!
-  for (int i = 0; i <= 1; i++) {
-    if ((speedOld[i] - 3) > speed[i] || (speedOld[i] + 3) < speed[i] || currentMillis - previousMillis >= 600) {
-      speedOld[i] = speed[i];
-      previousMillis = currentMillis;
-      if (speed[i] >= 0 && speed[i] < 6) pwm[i] = PWM_REV7;
-      else if (speed[i] >= 6 && speed[i] < 12) pwm[i] = PWM_REV6;
-      else if (speed[i] >= 12 && speed[i] < 18) pwm[i] = PWM_REV5;
-      else if (speed[i] >= 18 && speed[i] < 24) pwm[i] = PWM_REV4;
-      else if (speed[i] >= 24 && speed[i] < 30) pwm[i] = PWM_REV3;
-      else if (speed[i] >= 30 && speed[i] < 36) pwm[i] = PWM_REV2;
-      else if (speed[i] >= 36 && speed[i] < 42) pwm[i] = PWM_REV1;
-      else if (speed[i] >= 42 && speed[i] < 58) pwm[i] = PWM_BRK;
-      else if (speed[i] >= 58 && speed[i] < 64) pwm[i] = PWM_FWD1;
-      else if (speed[i] >= 64 && speed[i] < 70) pwm[i] = PWM_FWD2;
-      else if (speed[i] >= 70 && speed[i] < 76) pwm[i] = PWM_FWD3;
-      else if (speed[i] >= 76 && speed[i] < 82) pwm[i] = PWM_FWD4;
-      else if (speed[i] >= 82 && speed[i] < 88) pwm[i] = PWM_FWD5;
-      else if (speed[i] >= 88 && speed[i] < 94) pwm[i] = PWM_FWD6;
-      else if (speed[i] >= 94) pwm[i] = PWM_FWD7;
-
-      // then transmit IR data
-      pf.combo_pwm(pwm[1], pwm[0]); // red and blue in one IR package
-    }
-  }
-}
-
-//
-// =======================================================================================================
-// TRANSMIT MECCANO / ERECTOR IR SIGNAL
-// =======================================================================================================
-//
-
-void transmitMeccanoIr() {
-
-  static boolean A;
-  static boolean B;
-  static boolean C;
-  static boolean D;
-
-  // Flash green LED
-  greenLED.flash(30, 1000, 0, 0);
-
-  // Channel A ----
-  if (data.axis1 > 90) { // A +
-    buildIrSignal(1);
-    A = true;
-  }
-  if (data.axis1 < 10) { // A -
-    buildIrSignal(2), A = true;
-    A = true;
-  }
-  if (data.axis1 < 90 && data.axis1 > 10 && A) { // A OFF
-    buildIrSignal(3);
-    A = false;
-  }
-
-  // Channel B ----
-  if (data.axis2 > 90) { // B +
-    buildIrSignal(4);
-    B = true;
-  }
-  if (data.axis2 < 10) { // B -
-    buildIrSignal(5), A = true;
-    B = true;
-  }
-  if (data.axis2 < 90 && data.axis2 > 10 && B) { // B OFF
-    buildIrSignal(6);
-    B = false;
-  }
-
-  // Channel C ----
-  if (data.axis3 > 90) { // C +
-    buildIrSignal(7);
-    C = true;
-  }
-  if (data.axis3 < 10) { // C -
-    buildIrSignal(8), A = true;
-    C = true;
-  }
-  if (data.axis3 < 90 && data.axis3 > 10 && C) { // C OFF
-    buildIrSignal(9);
-    C = false;
-  }
-
-  // Channel D ----
-  if (data.axis4 > 90) { // D +
-    buildIrSignal(10);
-    D = true;
-  }
-  if (data.axis4 < 10) { // D -
-    buildIrSignal(11), A = true;
-    D = true;
-  }
-  if (data.axis4 < 90 && data.axis4 > 10 && D) { // D OFF
-    buildIrSignal(12);
-    D = false;
-  }
-}
 
 //
 // =======================================================================================================
@@ -885,7 +760,7 @@ void led() {
   // Red LED (ON = battery empty, number of pulses are indicating the vehicle number)
   if (batteryOkTx && (payload.batteryOk || transmissionMode > 1 || !transmissionState) ) {
     if (transmissionMode == 1) redLED.flash(140, 150, 500, vehicleNumber); // ON, OFF, PAUSE, PULSES
-    if (transmissionMode == 2) redLED.flash(140, 150, 500, pfChannel + 1); // ON, OFF, PAUSE, PULSES
+//    if (transmissionMode == 2) redLED.flash(140, 150, 500, pfChannel + 1); // ON, OFF, PAUSE, PULSES
     if (transmissionMode == 3) redLED.off();
 
   } else {
@@ -941,52 +816,7 @@ void drawDisplay() {
   u8g.firstPage();  // clear screen
   do {
     switch (activeScreen) {
-      case 0: // Screen # 0 splash screen-----------------------------------
-
-        if (operationMode == 0) u8g.drawStr(3, 10, "Micro RC Transmitter");
-        if (operationMode == 1) u8g.drawStr(3, 10, "Micro RC Tester");
-        if (operationMode == 2) u8g.drawStr(3, 10, "Micro PONG");
-
-        // Dividing Line
-        u8g.drawLine(0, 13, 128, 13);
-
-        // Software version
-        u8g.setPrintPos(3, 30);
-        u8g.print("SW: ");
-        u8g.print(codeVersion);
-
-        // Hardware version
-        u8g.print(" HW: ");
-        u8g.print(boardVersion);
-
-        u8g.setPrintPos(3, 43);
-        u8g.print("created by:");
-        u8g.setPrintPos(3, 55);
-        u8g.print("TheDIYGuy999");
-
-        break;
-
-      case 100: // Screen # 100 diagnosis screen-----------------------------------
-
-        u8g.drawStr(3, 10, "Joystick readings:");
-
-        // Joysticks:
-        u8g.setPrintPos(3, 30);
-        u8g.print("Axis 1: ");
-        u8g.print(data.axis1);
-        u8g.setPrintPos(3, 40);
-        u8g.print("Axis 2: ");
-        u8g.print(data.axis2);
-        u8g.setPrintPos(3, 50);
-        u8g.print("Axis 3: ");
-        u8g.print(data.axis3);
-        u8g.setPrintPos(3, 60);
-        u8g.print("Axis 4: ");
-        u8g.print(data.axis4);
-
-        break;
-
-      case 1: // Screen # 1 main screen-------------------------------------
+            case 1: // Screen # 1 main screen-------------------------------------
 
         // Tester mode ==================
         if (operationMode == 1) {
@@ -1009,19 +839,21 @@ void drawDisplay() {
 
         // Transmitter mode ================
         if (operationMode == 0) {
+          
           // screen dividing lines ----
           u8g.drawLine(0, 13, 128, 13);
           u8g.drawLine(64, 0, 64, 64);
 
           // Tx: data ----
           u8g.setPrintPos(0, 10);
-          if (transmissionMode > 1) {
-            u8g.print("Tx: IR   ");
-            if (transmissionMode < 3) u8g.print(pfChannel + 1);
-
-            u8g.setPrintPos(68, 10);
-            if (transmissionMode == 2) u8g.print("LEGO");
-            if (transmissionMode == 3) u8g.print("MECCANO");
+         if (transmissionMode > 1) {
+          transmissionMode=0;
+//            u8g.print("Tx: IR   ");
+//            if (transmissionMode < 3) u8g.print(pfChannel + 1);
+//
+//            u8g.setPrintPos(68, 10);
+//            if (transmissionMode == 2) u8g.print("LEGO");
+//            if (transmissionMode == 3) u8g.print("MECCANO");
           }
           else {
             u8g.print("Tx: 2.4G");
@@ -1082,6 +914,58 @@ void drawDisplay() {
         // called directly inside the loop() function to increase speed!
 
         break;
+
+      case 0: // Screen # 0 splash screen-----------------------------------
+        do {
+          u8g.drawBitmapP( 0, 0, 16, 64, MS_LOGO);
+        } while ( u8g.nextPage() );
+        break;
+
+      case 101:
+
+        if (operationMode == 0) u8g.drawStr(3, 7, "Micro RC Transmitter");
+        if (operationMode == 1) u8g.drawStr(3, 7, "Micro RC Tester");
+        if (operationMode == 2) u8g.drawStr(3, 7, "Micro PONG");
+
+        // Dividing Line
+        //u8g.drawLine(0, 13, 128, 13);
+
+        // Software version
+        u8g.setPrintPos(3, 25);
+        u8g.print("SW: ");
+        u8g.print(codeVersion);
+
+        // Hardware version
+        u8g.print(" HW: ");
+        u8g.print(boardVersion);
+
+        u8g.setPrintPos(3, 35);
+        u8g.print("created by:");
+        u8g.setPrintPos(3, 45);
+        u8g.print("Max Suurland &");
+        u8g.setPrintPos(3, 55);
+        u8g.print("TheDIYGuy999");
+      break;
+      case 100: // Screen # 100 diagnosis screen-----------------------------------
+
+        u8g.drawStr(3, 10, "Joystick readings:");
+
+        // Joysticks:
+        u8g.setPrintPos(3, 30);
+        u8g.print("Axis 1: ");
+        u8g.print(data.axis1);
+        u8g.setPrintPos(3, 40);
+        u8g.print("Axis 2: ");
+        u8g.print(data.axis2);
+        u8g.setPrintPos(3, 50);
+        u8g.print("Axis 3: ");
+        u8g.print(data.axis3);
+        u8g.setPrintPos(3, 60);
+        u8g.print("Axis 4: ");
+        u8g.print(data.axis4);
+
+        break;
+
 
       case 11: // Screen # 11 Menu 1 (channel reversing)-----------------------------------
 
@@ -1198,8 +1082,8 @@ void loop() {
   if (operationMode == 1) readRadio(); // 2.4 GHz radio tester
   if (operationMode == 0) {
     transmitRadio(); // 2.4 GHz radio
-    if (transmissionMode == 2) transmitLegoIr(); // LEGO Infrared
-    if (transmissionMode == 3) transmitMeccanoIr(); // MECCANO Infrared
+//    if (transmissionMode == 2) transmitLegoIr(); // LEGO Infrared
+//    if (transmissionMode == 3) transmitMeccanoIr(); // MECCANO Infrared
   }
 
   // Refresh display every 200 ms in tester mode (otherwise only, if value has changed)
