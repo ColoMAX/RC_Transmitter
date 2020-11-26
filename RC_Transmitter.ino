@@ -83,7 +83,7 @@ struct RcData {
   boolean mode1 = false; // Mode1 (toggle speed limitation)
   boolean mode2 = false; // Mode2 (toggle acc. / dec. limitation)
   boolean momentary1 = false; // Momentary push button
-  boolean momentary2 = false; //reservd button
+  //boolean momentary2 = false; //reservd button
   byte pot1; // Potentiometer
 };
 RcData data;
@@ -101,10 +101,10 @@ ackPayload payload;
 boolean transmissionState;
 
 // TX voltages
-boolean batteryOkTx = false;
-#define BATTERY_DETECT_PIN A7 // The 20k & 10k battery detection voltage divider is connected to pin A7
+//boolean batteryOkTx = false;
+//#define BATTERY_DETECT_PIN A7 // The 20k & 10k battery detection voltage divider is connected to pin A7
 float txVcc;
-float txBatt;
+//float txBatt;
 
 //Joystick reversing
 boolean joystickReversed[maxVehicleNumber + 1][4] = { // 1 + 10 Vehicle Addresses, 4 Servos
@@ -172,8 +172,12 @@ byte rightJoystickButtonState;
 #define BUTTON_RIGHT 10 // + or transmission mode select
 #define BUTTON_SEL 0 // select button for menu
 #define BUTTON_BACK 9 // back button for menu
-#define BUTTON_RESRV 3 //sererved button
+//#define BUTTON_RESRV 3 //sererved button
 
+//byte leftButtonState = 7; // init states with 7 (see macro below)!
+//byte rightButtonState = 7;
+//byte selButtonState = 7;
+//byte backButtonState = 7;
 
 // macro for detection of rising edge and debouncing
 /*the state argument (which must be a variable) records the current and the last 3 reads
@@ -213,7 +217,7 @@ int addressPositive = EEPROM.getAddress(sizeof(byte) * 44);
 
 // Tabs (header files in sketch directory)
 #include "readVCC.h"
-//#include "transmitterConfig.h"
+#include "transmitterConfig.h"
 //#include "MeccanoIr.h" // https://github.com/TheDIYGuy999/MeccanoIr
 #include "pong.h" // A little pong game :-)
 #include "logo.h"
@@ -266,6 +270,11 @@ void setupRadio() {
   }
 }
 
+
+const char DEVICENAME[] = "RoverTrans";
+
+#define SerialNumber_ 20201101
+
 //
 // =======================================================================================================
 // MAIN ARDUINO SETUP (1x during startup)
@@ -277,7 +286,13 @@ void setup() {
 #ifdef DEBUG
   Serial.begin(115200);
   printf_begin();
-  delay(3000);
+  Serial.println(__FILE__) ;
+  Serial.println("Compiled@ ");
+  Serial.println(__DATE__ " " __TIME__);
+  Serial.print("  IDE       "); Serial.println(ARDUINO);
+  Serial.print("  COMPANION "); //Serial.println(TEENSYDUINO);
+  Serial.print(DEVICENAME); Serial.println(" :: © 2020 Max Suurland");
+  //delay(3000);
 #endif
 
   // LED setup
@@ -291,7 +306,7 @@ void setup() {
   pinMode(BUTTON_RIGHT, INPUT_PULLUP);
   pinMode(BUTTON_SEL, INPUT_PULLUP);
   pinMode(BUTTON_BACK, INPUT_PULLUP);
-  pinMode(BUTTON_RESRV, INPUT_PULLUP);
+  //pinMode(BUTTON_RESRV, INPUT_PULLUP);
 
   // EEPROM setup
   EEPROM.readBlock(addressReverse, joystickReversed); // restore all arrays from the EEPROM
@@ -336,7 +351,7 @@ void setup() {
   u8g.setFont(u8g_font_6x10);
 
   // Splash screen
-  checkBattery();
+  //checkBattery();
   activeScreen = 0; // 0 = splash screen active
   drawDisplay();
   delay(3500);
@@ -400,9 +415,9 @@ static byte resvButtonState = 7;
       drawDisplay();
     }
     //rev button
-    if (DRE(digitalRead(BUTTON_RESRV), resvButtonState) && (transmissionMode == 1)) {
-      data.momentary2 = !data.momentary2;
-    }
+    //if (DRE(digitalRead(BUTTON_RESRV), resvButtonState) && (transmissionMode == 1)) {
+    //  data.momentary2 = !data.momentary2;
+    //}
 
     if (activeScreen <= 10) { // if menu is not displayed ----------
 
@@ -416,7 +431,7 @@ static byte resvButtonState = 7;
       //      }
 
       // Right button: Change transmission mode. Radio <> IR
-      if (infrared) { // only, if transmitter has IR option
+      //if (infrared) { // only, if transmitter has IR option
         //        if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState)) {
         //          if (transmissionMode < 3) transmissionMode ++;
         //          else {
@@ -425,17 +440,17 @@ static byte resvButtonState = 7;
         //          }
         //          drawDisplay();
         //        }
-      }
-      else { // only, if transmitter has no IR option
+      //}
+      //else { // only, if transmitter has no IR option
         // Right button: Channel selection -
-        //        if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState) && (transmissionMode < 3)) {
-        //          vehicleNumber --;
-        //          if (vehicleNumber < 1) vehicleNumber = maxVehicleNumber;
-        //          setupRadio(); // Re-initialize the radio with the new pipe address
-        //          setupPowerfunctions(); // Re-initialize the LEGO IR transmitter with the new channel address
-        //          drawDisplay();
-        //        }
-      }
+                if (DRE(digitalRead(BUTTON_RIGHT), rightButtonState) && (transmissionMode < 3)) {
+                  vehicleNumber --;
+                  if (vehicleNumber < 1) vehicleNumber = maxVehicleNumber;
+                  setupRadio(); // Re-initialize the radio with the new pipe address
+                  //setupPowerfunctions(); // Re-initialize the LEGO IR transmitter with the new channel address
+                  drawDisplay();
+                }
+      //}
     }
     else { // if menu is displayed -----------
       // Right button: Value -
@@ -704,9 +719,9 @@ void readRadio() {
   static unsigned long lastRecvTime = 0;
   byte pipeNo;
 
-  payload.batteryVoltage = txBatt; // store the battery voltage for sending
+  payload.batteryVoltage = 5; // txBatt; // store the battery voltage for sending
   payload.vcc = txVcc; // store the vcc voltage for sending
-  payload.batteryOk = batteryOkTx; // store the battery state for sending
+  payload.batteryOk = true; //batteryOkTx; // store the battery state for sending
 
   if (radio.available(&pipeNo)) {
     radio.writeAckPayload(pipeNo, &payload, sizeof(struct ackPayload) );  // prepare the ACK payload
@@ -758,7 +773,7 @@ void readRadio() {
 void led() {
 
   // Red LED (ON = battery empty, number of pulses are indicating the vehicle number)
-  if (batteryOkTx && (payload.batteryOk || transmissionMode > 1 || !transmissionState) ) {
+  if ( true && (payload.batteryOk || transmissionMode > 1 || !transmissionState) ) { //batteryOkTx
     if (transmissionMode == 1) redLED.flash(140, 150, 500, vehicleNumber); // ON, OFF, PAUSE, PULSES
 //    if (transmissionMode == 2) redLED.flash(140, 150, 500, pfChannel + 1); // ON, OFF, PAUSE, PULSES
     if (transmissionMode == 3) redLED.off();
@@ -773,7 +788,7 @@ void led() {
 // CHECK TX BATTERY VOLTAGE
 // =======================================================================================================
 //
-
+/*
 void checkBattery() {
 
   // Every 500 ms
@@ -804,7 +819,7 @@ void checkBattery() {
     }
   }
 }
-
+*/
 //
 // =======================================================================================================
 // DRAW DISPLAY
@@ -827,10 +842,10 @@ void drawDisplay() {
           u8g.setPrintPos(0, 10);
           u8g.print("CH: ");
           u8g.print(vehicleNumber);
-          u8g.setPrintPos(50, 10);
-          u8g.print("Bat: ");
-          u8g.print(txBatt);
-          u8g.print("V");
+          //u8g.setPrintPos(50, 10);
+          //u8g.print("Bat: ");
+          //u8g.print(txBatt);
+          //u8g.print("V");
 
           drawTarget(0, 14, 50, 50, data.axis4, data.axis3); // left joystick
           drawTarget(74, 14, 50, 50, data.axis1, data.axis2); // right joystick
@@ -865,9 +880,9 @@ void drawDisplay() {
           u8g.print("Vcc: ");
           u8g.print(txVcc);
 
-          u8g.setPrintPos(3, 35);
-          u8g.print("Bat: ");
-          u8g.print(txBatt);
+          //u8g.setPrintPos(3, 35);
+          //u8g.print("Bat: ");
+          //u8g.print(txBatt);
 
           // Rx: data. Only display the following content, if in radio mode ----
           if (transmissionMode == 1) {
@@ -942,7 +957,7 @@ void drawDisplay() {
         u8g.setPrintPos(3, 35);
         u8g.print("created by:");
         u8g.setPrintPos(3, 45);
-        u8g.print("Max Suurland &");
+        u8g.print("MSTech &");
         u8g.setPrintPos(3, 55);
         u8g.print("TheDIYGuy999");
       break;
@@ -1099,7 +1114,7 @@ void loop() {
   // If not in game mode:
   else {
     led(); // LED control
-    checkBattery(); // Check battery
+    //checkBattery(); // Check battery
     readButtons();
   }
 }

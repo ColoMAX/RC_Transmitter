@@ -22,12 +22,13 @@ const float diodeDrop = 0.72;
 #define CH2
 #define CH3
 #define CH4
+//#define Ch5 on analog pin on A7
 
 // Infrared
 boolean infrared = false;
 
 // Board type
-const float boardVersion = 1.0; // Board revision (MUST MATCH WITH YOUR BOARD REVISION!!)
+const float boardVersion = 2.0; // Board revision (MUST MATCH WITH YOUR BOARD REVISION!!)
 
 // Joystick calibration
 int range = 1023; // 1023, if entire pot wiper range is used
